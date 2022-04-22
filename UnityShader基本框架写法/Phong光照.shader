@@ -8,8 +8,7 @@
     SubShader {
         Tags {
             "RenderType"="Opaque"   //不透明
-            //"RenderType"="Transparent" "IgnoreProjector" = "True""Queue" = "Transparent"  //透明
-            
+            //"RenderType"="Transparent" "IgnoreProjector" = "True""Queue" = "Transparent"  //透明    
         }
         Pass {
             // Blend SrcAlpha Oneminussrcalpha    //透明融合配置
@@ -24,36 +23,60 @@
             #pragma target 3.0
 
             // 声明变量
-             float3 _MainCol;         
-             sampler2D _MainTex;       
-             float _Intensity;        
-             float _SpecularPow;       
+             float3      _MainCol;         
+             sampler2D   _MainTex;       
+             float       _Intensity;        
+             float       _SpecularPow;       
 
             // 输入结构
             struct VertexInput {
-                float4 vertex : POSITION;       
+                float4 vertex   : POSITION;       
                 float4 texcoord : TEXCOORD0;    
+                float3 normal   : NORMAL;
             };
 
             // 输出结构
             struct VertexOutput {
-                float4 pos : SV_POSITION;
-                float4 posWS : TEXCOORD0;      
-                float2 uv : TEXCOORD1;        
+                float4 pos    : SV_POSITION;
+                float4 posWS  : TEXCOORD0;    
+                float3 nDirWS : TEXCOORD1;  
+                float2 uv     : TEXCOORD2;        
             };
 
             // 输入结构>>>顶点Shader>>>输出结构
             VertexOutput vert (VertexInput v) {
                 VertexOutput o;                                      // 新建输出结构
-                    o.posCS = UnityObjectToClipPos( v.vertex );     // 变换顶点位置 OS>CS
-                    o.posWS = mul(unity_ObjectToWorld, v.vertex);   // 变换顶点位置 OS>WS
-                    o.uv = TRANSFORM_TEX(v.texcoord,_MainTex);
+                    o.pos   = UnityObjectToClipPos( v.vertex );      // 顶点位置 OS->CS
+                    o.posWS = mul(unity_ObjectToWorld, v.vertex);    // 顶点位置 OS->WS
+                    o.nDirWS = UnityObjectToWorldNormal(v.normal);   // 法线方向 OS->WS
+                    o.uv = TRANSFORM_TEX(v.texcoord,_MainTex);       // UV绑定纹理
                 return o;                                           // 返回输出结构
             }
 
             // 输出结构>>>像素
             float4 frag(VertexOutput i) : COLOR {
-                float3 finalRGB = tex2D(_MainTex,i.uv)*_MainCol.rgb*_Intensity;              //采样贴图
+                
+                //准备向量
+                float3 nDirWS = normalize (i.nDirWS);                                //世界空间法线方向
+                float3 lDirWS = _WorldSpaceLightPos0.xyz;                            //世界空间平行光方向
+                float3 vDirWS = normalize(_WorldSpaceCameraPos.xyz - i.posWS.xyz);   //世界空间视线方向
+                float3 lrDirWS = reflect(-lDirWS, nDirWS);                           //世界空间光线反射方向
+
+                //点积计算
+                float ndotl = dot(nDirWS, lDirWS);
+                float lrdotv = dot(lrDirWS, vDirWS);
+
+                //光照模型 漫反射+高光反射
+                //漫反射
+                float lambert = max(0.0 , ndotl);
+                //float halfLambert = 0.5 * ndotl +0.5;  
+                //高光反射
+                float phong = pow(max(0.0 , lrdotv), _SpecularPow);
+
+                float3 finalRGB = _MainCol * lambert + phong;
+
+
+                //float3 var_MainTex = tex2D(_MainTex,i.uv)*_MainCol.rgb*_Intensity;              //采样贴图
                 return float4(finalRGB, 1.0);
             }
             ENDCG
