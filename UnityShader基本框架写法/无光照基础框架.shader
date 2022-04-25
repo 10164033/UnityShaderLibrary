@@ -32,8 +32,9 @@
 
             // 输出结构
             struct VertexOutput {
+                float4 pos   : SV_POSITION;       // 裁剪空间位置
                 float4 posWS : TEXCOORD0;       // 世界空间顶点位置
-                float2 uv : TEXCOORD1;          // 纹理坐标
+                float2 uv    : TEXCOORD1;          // 纹理坐标
             };
 
             // 输入结构>>>顶点Shader>>>输出结构
