@@ -22,6 +22,7 @@
             // 声明变量
              float3 _MainCol;        // RGB  float3
              sampler2D _MainTex;     // 纹理 sampler2D
+             float4 _MainTex_ST;
              float _Intensity;       // 标量 float
 
             // 输入结构
@@ -40,7 +41,7 @@
             // 输入结构>>>顶点Shader>>>输出结构
             VertexOutput vert (VertexInput v) {
                 VertexOutput o;                                      // 新建输出结构
-                    o.posCS = UnityObjectToClipPos( v.vertex );     // 变换顶点位置 OS>CS
+                    o.pos = UnityObjectToClipPos( v.vertex );       // 变换顶点位置 OS>CS
                     o.posWS = mul(unity_ObjectToWorld, v.vertex);   // 变换顶点位置 OS>WS
                     o.uv = TRANSFORM_TEX(v.texcoord,_MainTex);
                 return o;                                           // 返回输出结构
