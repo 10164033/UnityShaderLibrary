@@ -8,6 +8,11 @@ vec2 fixUV (in vec2 uv)
     return (2.0*uv-iResolution.xy)/min(iResolution.x,iResolution.y);
 }
 //--------------------------------------------------------------
+//比较大小函数
+vec2 return_min (vec2 a,vec2 b)
+{
+    return a.x < b.x ? a : b ;
+}
 //平面SDF
 float SDF_Plane (in vec3 p)
 {
@@ -24,35 +29,80 @@ float SDF_Sphere (in vec3 p)
 float SDF_Square(in vec3 p)
 {
     vec3 square = vec3(0.2);
-    vec3 abs_p  = abs(p-vec3(0.5,-0.1,0.5));
+    vec3 abs_p  = abs(p-vec3(0.5,-0.2,-0.8));
     vec3 distance = abs_p - square;
     //length(max(x,0))   或者  length(max(0,y))  或者length(max(x,y)),为正数
     float outSquare = length(max(distance,vec3(0.0)));
     //在物体内部,最小值就是距离物体最近的轴,为负数
     float inSquare  = min(max(distance.x,max(distance.y,distance.z)),0.0);
     //每一点都有唯一一个距离值,返回
-    return outSquare+inSquare;
+    float square_d =outSquare+inSquare;
+
+    float sphere_d = -1.0*SDF_Sphere (p-vec3(0.5,0.24,-0.8));
+    return max(square_d,sphere_d);
 }
 //-------------------------------------------------------------------------------------
-
-
-
-
-
+//圆环SDF
+float SDF_Torus( vec3 p, vec2 t )
+{
+  vec2 q = vec2(length(p.xz)-t.x,p.y);
+  return length(q)-t.y;
+}
 //-------------------------------------------------------------------------------------
+//圆锥SDF
+float SDF_Cone( in vec3 p, in vec2 c, float h )
+{
+  // c is the sin/cos of the angle, h is height
+  // Alternatively pass q instead of (c,h),
+  // which is the point at the base in 2D
+  vec2 q = h*vec2(c.x/c.y,-1.0);
+    
+  vec2 w = vec2( length(p.xz), p.y );
+  vec2 a = w - q*clamp( dot(w,q)/dot(q,q), 0.0, 1.0 );
+  vec2 b = w - q*vec2( clamp( w.x/q.x, 0.0, 1.0 ), 1.0 );
+  float k = sign( q.y );
+  float d = min(dot( a, a ),dot(b, b));
+  float s = max( k*(w.x*q.y-w.y*q.x),k*(w.y-q.y));
+  return sqrt(d)*sign(s);
+}
+//------------------------------------------------------------
+//方框SDF
+float SDF_BoxFrame( vec3 p, vec3 b, float e )
+{
+       p = abs(p  )-b;
+  vec3 q = abs(p+e)-e;
+  return min(min(
+      length(max(vec3(p.x,q.y,q.z),0.0))+min(max(p.x,max(q.y,q.z)),0.0),
+      length(max(vec3(q.x,p.y,q.z),0.0))+min(max(q.x,max(p.y,q.z)),0.0)),
+      length(max(vec3(q.x,q.y,p.z),0.0))+min(max(q.x,max(q.y,p.z)),0.0));
+}
+//-------------------------------------------------------------------------------------
+//软融合
+float smin( float a, float b, float k )
+{
+    float h = clamp( 0.5+0.5*(b-a)/k, 0.0, 1.0 );
+    return mix( b, a, h ) - k*h*(1.0-h);
+}
+//---------------------------------------------------------------------------
 //场景(SDF结合)
 vec2 Scene(in vec3 p)
 {
     vec2 plane_d = vec2(SDF_Plane(p),1.0);
     vec2 sphere_d = vec2(SDF_Sphere(p),2.0);
     vec2 suqare_d = vec2(SDF_Square(p),3.0);
-    if (plane_d.x < sphere_d.x &&plane_d.x < suqare_d.x)
-        return plane_d;
-    if (sphere_d.x < plane_d.x &&sphere_d.x < suqare_d.x)
-         return sphere_d;
-    if (suqare_d.x < plane_d.x &&suqare_d.x < sphere_d.x)
-        return suqare_d;
-  
+    vec2 Torus_d = vec2(SDF_Torus(p-vec3(-0.0,-0.8*abs(sin(iTime/4.0)),0.0),vec2(2.5*abs(sin(iTime/2.0)),0.2)),4.0);
+    vec2 Cone_d = vec2(SDF_Cone(p-vec3(-1.4,0.1,-1.5),vec2(1.0,1.0),1.0),5.0);
+    vec2 BoxFrame_d = vec2(SDF_BoxFrame(p-vec3(0.0,-0.2,0.1),vec3(0.9,0.4,0.9),0.02),6.0);
+
+
+    vec2 d = return_min(plane_d,sphere_d);
+    d = return_min(d,suqare_d);
+    d.x = smin(d.x,Torus_d.x,0.1);
+    d.x = smin(d.x,Cone_d.x,0.1);
+    //d.x = smin(d.x,Cone_d.x,0.1);
+
+    return d;
+    
 }
 //---------------------------------------------------------------------------------
 //计算法线  iQ
@@ -159,7 +209,9 @@ float softshadow_Pro( vec3 origin_s, vec3 direction_s, float k)
  vec3 Render(vec2 uv){
      vec3 BackgroundColor = vec3(0.3,0.5,0.6); 
      vec3 color = BackgroundColor;
-     vec3 origin = vec3(2.0*cos(iTime),1.0,2.0*sin(iTime));
+     //摄像机旋转速度
+     vec3 origin = vec3(2.0*cos(iTime/2.0),1.0,2.0*sin(iTime/2.0));
+     //vec3 origin = vec3(1.0,2.0,3.0);
      if (iMouse.z>0.001)
      {
          float theta = iMouse.x / iResolution.x * 2.0 * PI;  //弧度转化为角度
@@ -187,28 +239,61 @@ float softshadow_Pro( vec3 origin_s, vec3 direction_s, float k)
          //平面颜色
          if(t.y >0.9&&t.y <1.1)
          {
-            diffuseColor= vec3(0.3,0.65,0.3); 
-            specularPow = 300.0;
-            
+            vec2 grid = floor(mod(p.xz*2.0,2.0));
+            if (grid.x==grid.y)
+                 {
+                 diffuseColor= vec3(0.3,0.65,0.3); 
+                 specularPow = 100.0;
+                 }
+                 else 
+                 {
+                 diffuseColor= vec3(0.0,0.3,0.3);
+                 specularPow = 300.0;
+                 }
          }
          //球体颜色
          else if (t.y >1.9&&t.y <2.1)
         {
+           vec3 s = sign(fract(p*0.5)-0.5);
+           float value =  0.5-0.5*s.x*s.y*s.z;
+           if (value == 1.0)
+           {
            diffuseColor=vec3(0.7,0.4,0.5); 
-           specularPow = 100.0;
+           specularPow = 300.0;
            ambientColor = vec3(0.7,0.4,0.5);
+           }
+           else
+          diffuseColor=vec3(0.4,0.1,0.7); 
+          specularPow = 100.0;
+          ambientColor = vec3(0.4,0.1,0.2);
+
         }
         //立方体颜色
-        else if (t.y >2.9&&t.y <3.1)
+        else if (t.y >2.9 && t.y <3.1)
         {
-           diffuseColor =vec3(0.1,0.1,0.5); 
-           ambientColor =vec3(0.1,0.1,0.5); 
+           diffuseColor =vec3(0.1,0.9,0.7); 
+           ambientColor =vec3(0.1,0.5,0.5); 
            specularPow = 100.0;
+        }
+        //圆环颜色
+        else if(t.y >3.9 && t.y <4.1){
+             diffuseColor =vec3(0.1,0.7,0.6); 
+             ambientColor =vec3(0.1,0.7,0.6); 
+             specularPow = 50.0;
+        }
+        else if(t.y >4.9 && t.y <5.1){
+             diffuseColor =vec3(0.4,0.9,0.6); 
+             ambientColor =vec3(0.4,0.9,0.6); 
+             specularPow = 50.0;
+        }
+        else if(t.y >5.9 && t.y <6.1){
+             diffuseColor =vec3(0.6); 
+             ambientColor =vec3(0.6); 
+             specularPow = 100.0;
         }
 
          vec3  diffuse =ndotl*diffuseColor;
          float specular = pow(ndoth,specularPow);
-
          vec3 ambient =ambientColor*(p.y+0.3);
          //p.y是从下到上有渐变,从而使立方体从平面中凸显出来
 

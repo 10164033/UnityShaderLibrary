@@ -53,6 +53,26 @@ vec3 ColorGrid (in vec2 uv)
     orignColor = vec3(0.6);
     return orignColor;
 }
+//三种网格生成形式
+//--01
+float checker01 (in vec2 uv)
+{
+    vec2 uv_floor = floor (uv);
+    float grid = mod((uv_floor.x+uv_floor.y),2.0);
+    return grid;
+}
+//--02
+float checker02 (in vec3 p)
+{
+    ivec2 ip = ivec2(round(p+0.5));
+    return float((ip.x^ip.y)&1);
+}
+//--03
+float checker03 (in vec3 p)
+{
+    vec3 s = sign(fract(p*0.5)-0.5);
+    return 0.5-0.5*s.x*s.y*s.z;
+}
 //--------------------------------------------------------------------------------------------------------------
 //画直线函数
 float lineFunct(in vec2 uv , in vec2 a, in vec2 b, in float lineWidth)
@@ -103,10 +123,10 @@ float funPlot_1(in vec2 uv ,in float uvTime)
 //函数构造方法2
 float FuncPiot(in vec2 uv, in float lineWidth)
 {
-    float y = sinX(uv.x);
+    float y = round(uv.x+0.5);
     return smoothstep(y-lineWidth,y+lineWidth,uv.y);
 }
-//画任意函数方法2
+//抗锯齿
 #define AA 4
 float edgeDetect(in vec2 uv,in float lineWidth,in float uvTimes)  //只要调用fixUV ,就要乘以网格密度
 {
